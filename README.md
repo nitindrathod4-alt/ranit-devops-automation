@@ -1,6 +1,7 @@
 <div align="center">
 
-# RANIT
+<img src="assets/ranit-logo.svg" alt="RANIT logo" width="560" />
+
 ### AI-Powered DevOps Automation CLI
 
 **You choose the project. RANIT helps automate the workflow.**
