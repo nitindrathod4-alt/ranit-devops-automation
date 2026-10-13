@@ -77,6 +77,8 @@ ranit doctor
 ranit init
 ranit analyze "./my-project"
 ranit analyze "./my-project" --json
+ranit scan "./my-project"
+ranit scan "./my-project" --json
 ```
 
 ## 🧰 Command reference
@@ -162,3 +164,15 @@ MIT — see [LICENSE](LICENSE).
 **RANIT — Inspect first. Plan clearly. Automate safely.**
 
 </div>
+
+
+## Security scan (alpha)
+
+Run a read-only heuristic scan on a local project you own or are authorized to inspect:
+
+```bash
+ranit scan ./my-project
+ranit scan ./my-project --json
+```
+
+The scanner reports possible hard-coded credentials, risky patterns, dependency manifests, and deployment files. It does not execute project code or change files. Results are heuristic and can include false positives or miss issues; this is not a substitute for a dedicated security scanner.
