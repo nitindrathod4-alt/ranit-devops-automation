@@ -12,6 +12,7 @@ from typing import Any
 from ranit import __version__
 from ranit.diagnose import diagnose_log
 from ranit.health import check_project_health
+from ranit.logs import analyze_log
 from ranit.inspector import inspect_project
 from ranit.scanner import scan_project
 
@@ -36,6 +37,10 @@ def build_parser() -> argparse.ArgumentParser:
     diagnose = subparsers.add_parser("diagnose", help="Suggest possible causes from a local log file.")
     diagnose.add_argument("log_file", type=Path, help="Path to a local text log file.")
     diagnose.add_argument("--json", action="store_true", help="Print machine-readable JSON")
+
+    logs = subparsers.add_parser("logs", help="Summarize severity and common patterns in a log file.")
+    logs.add_argument("log_file", type=Path, help="Path to a local text log file.")
+    logs.add_argument("--json", action="store_true", help="Print machine-readable JSON")
 
     health = subparsers.add_parser("health", help="Run read-only project health checks.")
     health.add_argument("path", type=Path, help="Path to a local project directory.")
@@ -107,6 +112,30 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"    Suggested checks: {item['suggested_checks']}")
             if not report["diagnoses"]:
                 print("  No known patterns matched. Review the log manually.")
+            print(f"\nNote: {report['note']}")
+        return 0 if report["exists"] else 2
+
+    if args.command == "logs":
+        try:
+            report = analyze_log(args.log_file)
+        except (OSError, ValueError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print(f"Log: {report['log_path']}")
+            print(f"Exists: {report['exists']}")
+            print(f"Bytes read: {report['bytes_read']}")
+            print(f"Total lines: {report['total_lines']}")
+            print("\nSeverity counts:")
+            for severity, count in report["severity_counts"].items():
+                print(f"  {severity}: {count}")
+            print("\nPattern matches:")
+            for item in report["matches"]:
+                print(f"  Line {item['line']}: [{item['severity']}] {item['category']}")
+            if not report["matches"]:
+                print("  No known error patterns matched.")
             print(f"\nNote: {report['note']}")
         return 0 if report["exists"] else 2
 
