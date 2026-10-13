@@ -123,17 +123,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Exists:  {report['exists']}")
             print(f"Status:  {report['status']}")
             print(f"Files scanned: {report.get('files_scanned', 0)}")
-            print("\\nDetected markers:")
+            print("\nDetected markers:")
             for marker in report.get("markers", []):
                 print(f"  - {marker}")
-            print("\\nTool checks:")
+            print("\nTool checks:")
             for check in report.get("checks", []):
                 location = f" ({check['path']})" if check["path"] else ""
                 print(f"  [{check['status'].upper()}] {check['tool']}{location}")
-            print("\\nIssues:")
+            print("\nIssues:")
             for issue in report.get("issues", []) or ["No issues detected by these checks."]:
                 print(f"  - {issue}")
-            print(f"\\nNote: {report['note']}")
+            print(f"\nNote: {report['note']}")
         return 0 if report.get("exists") and report.get("status") == "OK" else (2 if not report.get("exists") else 1)
 
     if args.command == "scan":
