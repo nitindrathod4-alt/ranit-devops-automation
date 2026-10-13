@@ -11,6 +11,7 @@ from typing import Any
 
 from ranit import __version__
 from ranit.diagnose import diagnose_log
+from ranit.health import check_project_health
 from ranit.inspector import inspect_project
 from ranit.scanner import scan_project
 
@@ -35,6 +36,10 @@ def build_parser() -> argparse.ArgumentParser:
     diagnose = subparsers.add_parser("diagnose", help="Suggest possible causes from a local log file.")
     diagnose.add_argument("log_file", type=Path, help="Path to a local text log file.")
     diagnose.add_argument("--json", action="store_true", help="Print machine-readable JSON")
+
+    health = subparsers.add_parser("health", help="Run read-only project health checks.")
+    health.add_argument("path", type=Path, help="Path to a local project directory.")
+    health.add_argument("--json", action="store_true", help="Print machine-readable JSON")
 
     subparsers.add_parser("init", help="Show the safe first-run setup checklist.")
     return parser
@@ -104,6 +109,32 @@ def main(argv: list[str] | None = None) -> int:
                 print("  No known patterns matched. Review the log manually.")
             print(f"\nNote: {report['note']}")
         return 0 if report["exists"] else 2
+
+    if args.command == "health":
+        try:
+            report = check_project_health(args.path)
+        except (OSError, ValueError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print(f"Project: {report['project_path']}")
+            print(f"Exists:  {report['exists']}")
+            print(f"Status:  {report['status']}")
+            print(f"Files scanned: {report.get('files_scanned', 0)}")
+            print("\\nDetected markers:")
+            for marker in report.get("markers", []):
+                print(f"  - {marker}")
+            print("\\nTool checks:")
+            for check in report.get("checks", []):
+                location = f" ({check['path']})" if check["path"] else ""
+                print(f"  [{check['status'].upper()}] {check['tool']}{location}")
+            print("\\nIssues:")
+            for issue in report.get("issues", []) or ["No issues detected by these checks."]:
+                print(f"  - {issue}")
+            print(f"\\nNote: {report['note']}")
+        return 0 if report.get("exists") and report.get("status") == "OK" else (2 if not report.get("exists") else 1)
 
     if args.command == "scan":
         try:
