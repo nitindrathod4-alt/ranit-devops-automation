@@ -11,6 +11,7 @@ from typing import Any
 
 from ranit import __version__
 from ranit.inspector import inspect_project
+from ranit.scanner import scan_project
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -25,6 +26,10 @@ def build_parser() -> argparse.ArgumentParser:
     analyze = subparsers.add_parser("analyze", help="Read project files and identify its stack.")
     analyze.add_argument("path", type=Path, help="Path to a local project directory.")
     analyze.add_argument("--json", action="store_true", help="Print machine-readable JSON")
+
+    scan = subparsers.add_parser("scan", help="Run a read-only heuristic security scan.")
+    scan.add_argument("path", type=Path, help="Path to a local project directory.")
+    scan.add_argument("--json", action="store_true", help="Print machine-readable JSON")
 
     subparsers.add_parser("init", help="Show the safe first-run setup checklist.")
     return parser
@@ -73,6 +78,27 @@ def main(argv: list[str] | None = None) -> int:
         return _doctor()
     if args.command == "init":
         return _init()
+    if args.command == "scan":
+        try:
+            report = scan_project(args.path)
+        except (OSError, ValueError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print(f"Project: {report['project_path']}")
+            print(f"Files scanned: {report['files_scanned']}")
+            print(f"Dependency files: {len(report['dependency_files'])}")
+            print(f"Deployment files: {len(report['deployment_files'])}")
+            print("\nFindings:")
+            for finding in report["findings"]:
+                print(f"  [{finding['severity']}] {finding['file']}:{finding['line']} — {finding['rule']}")
+            if not report["findings"]:
+                print("  No matching heuristic patterns found.")
+            print(f"\nNote: {report.get('note', 'No project files were changed.')}")
+        return 0 if report["exists"] else 2
+
     if args.command == "analyze":
         try:
             report = inspect_project(args.path)
