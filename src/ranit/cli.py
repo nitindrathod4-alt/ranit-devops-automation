@@ -1,3 +1,4 @@
+
 """Command-line interface for RANIT."""
 
 from __future__ import annotations
@@ -11,40 +12,48 @@ from typing import Any
 
 from ranit import __version__
 from ranit.diagnose import diagnose_log
+from ranit.docker_health import check_docker_health
 from ranit.health import check_project_health
-from ranit.logs import analyze_log
 from ranit.inspector import inspect_project
+from ranit.logs import analyze_log
 from ranit.scanner import scan_project
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ranit",
-        description="RANIT — a safety-first DevOps automation CLI.",
+        description="RANIT - a safety-first DevOps automation CLI.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command")
+
     subparsers.add_parser("doctor", help="Check local tools and show their availability.")
 
     analyze = subparsers.add_parser("analyze", help="Read project files and identify its stack.")
-    analyze.add_argument("path", type=Path, help="Path to a local project directory.")
-    analyze.add_argument("--json", action="store_true", help="Print machine-readable JSON")
+    analyze.add_argument("path", type=Path)
+    analyze.add_argument("--json", action="store_true")
 
     scan = subparsers.add_parser("scan", help="Run a read-only heuristic security scan.")
-    scan.add_argument("path", type=Path, help="Path to a local project directory.")
-    scan.add_argument("--json", action="store_true", help="Print machine-readable JSON")
+    scan.add_argument("path", type=Path)
+    scan.add_argument("--json", action="store_true")
 
-    diagnose = subparsers.add_parser("diagnose", help="Suggest possible causes from a local log file.")
-    diagnose.add_argument("log_file", type=Path, help="Path to a local text log file.")
-    diagnose.add_argument("--json", action="store_true", help="Print machine-readable JSON")
+    diagnose = subparsers.add_parser("diagnose", help="Suggest causes from a local log file.")
+    diagnose.add_argument("log_file", type=Path)
+    diagnose.add_argument("--json", action="store_true")
 
-    logs = subparsers.add_parser("logs", help="Summarize severity and common patterns in a log file.")
-    logs.add_argument("log_file", type=Path, help="Path to a local text log file.")
-    logs.add_argument("--json", action="store_true", help="Print machine-readable JSON")
+    logs = subparsers.add_parser("logs", help="Summarize severity and patterns in a log file.")
+    logs.add_argument("log_file", type=Path)
+    logs.add_argument("--json", action="store_true")
 
     health = subparsers.add_parser("health", help="Run read-only project health checks.")
-    health.add_argument("path", type=Path, help="Path to a local project directory.")
-    health.add_argument("--json", action="store_true", help="Print machine-readable JSON")
+    health.add_argument("path", type=Path)
+    health.add_argument("--json", action="store_true")
+
+    docker_health = subparsers.add_parser(
+        "docker-health",
+        help="Read Docker container status and health without changing containers.",
+    )
+    docker_health.add_argument("--json", action="store_true")
 
     subparsers.add_parser("init", help="Show the safe first-run setup checklist.")
     return parser
@@ -91,8 +100,36 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "doctor":
         return _doctor()
+
     if args.command == "init":
         return _init()
+
+    if args.command == "docker-health":
+        report = check_docker_health()
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("RANIT Docker Container Health Check")
+            print("===================================")
+            print(f"Docker CLI available: {report['available']}")
+
+            if report["error"]:
+                print(f"Error: {report['error']}")
+
+            if report["containers"]:
+                for container in report["containers"]:
+                    print(f"\nName:   {container['name']}")
+                    print(f"Image:  {container['image']}")
+                    print(f"State:  {container['state']}")
+                    print(f"Status: {container['status']}")
+                    print(f"Health: {container['health']}")
+            elif not report["error"]:
+                print("No containers found.")
+
+            print(f"\nNote: {report['note']}")
+
+        return 0 if report["available"] and report["error"] is None else 1
+
     if args.command == "diagnose":
         try:
             report = diagnose_log(args.log_file)
@@ -180,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Deployment files: {len(report['deployment_files'])}")
             print("\nFindings:")
             for finding in report["findings"]:
-                print(f"  [{finding['severity']}] {finding['file']}:{finding['line']} — {finding['rule']}")
+                print(f"  [{finding['severity']}] {finding['file']}:{finding['line']} - {finding['rule']}")
             if not report["findings"]:
                 print("  No matching heuristic patterns found.")
             print(f"\nNote: {report.get('note', 'No project files were changed.')}")
