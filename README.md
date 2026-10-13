@@ -178,3 +178,16 @@ ranit scan ./my-project --json
 ```
 
 The scanner reports possible hard-coded credentials, risky patterns, dependency manifests, and deployment files. It does not execute project code or change files. Results are heuristic and can include false positives or miss issues; this is not a substitute for a dedicated security scanner.
+
+
+## 🩺 Project health check
+
+Run a read-only check against a local project directory:
+
+```bash
+ranit health ./my-project
+ranit health ./my-project --json
+```
+
+The health check reports recognized project markers and checks whether related local tools (such as Python, Node.js, Java, Go, Rust, Docker, or Git) are available on PATH. A missing tool is a warning, not proof that the project is broken. An unrecognized project directory is reported as an error. This command does not run builds or tests, install dependencies, execute project scripts, modify files, or provision cloud resources.
+
