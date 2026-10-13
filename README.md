@@ -79,6 +79,8 @@ ranit analyze "./my-project"
 ranit analyze "./my-project" --json
 ranit scan "./my-project"
 ranit scan "./my-project" --json
+ranit diagnose "./error.log"
+ranit diagnose "./error.log" --json
 ```
 
 ## 🧰 Command reference
@@ -96,7 +98,7 @@ ranit scan "./my-project" --json
 | `ranit deploy` | Deployment workflows | Planned; disabled |
 | `ranit aws ...` | AWS automation | Planned; disabled |
 
-## 🔍 Project markers detected
+## 🩺 Local log diagnosis (basic)\n\nUse `ranit diagnose ./error.log` to match a local text log against a small set of common Python, Docker/Kubernetes, AWS access, network, disk/memory, and permission error patterns. RANIT prints suggested checks, not the log contents. Logs larger than 2 MB are rejected. The command is local and read-only; it does not call an AI provider, execute commands, fix files, or guarantee a root cause. Treat results as suggestions and inspect the original logs securely.\n\n## 🔍 Project markers detected
 
 The current analyzer detects common files associated with:
 - Python: `pyproject.toml`, `requirements.txt`, `Pipfile`
@@ -139,7 +141,7 @@ GitHub Actions runs tests for pushes and pull requests targeting `main`.
 - [x] Python package and CLI entry point
 - [x] Environment diagnostics
 - [x] Read-only project marker detection
-- [x] JSON report
+- [x] JSON report\n- [x] Basic local pattern-based log diagnosis
 - [x] Unit tests and GitHub Actions workflow
 - [ ] Safe command execution framework with allowlists, timeouts, and dry-run mode
 - [ ] Build/test adapters by project type
