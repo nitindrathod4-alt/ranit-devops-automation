@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from ranit import __version__
+from ranit.diagnose import diagnose_log
 from ranit.inspector import inspect_project
 from ranit.scanner import scan_project
 
@@ -30,6 +31,10 @@ def build_parser() -> argparse.ArgumentParser:
     scan = subparsers.add_parser("scan", help="Run a read-only heuristic security scan.")
     scan.add_argument("path", type=Path, help="Path to a local project directory.")
     scan.add_argument("--json", action="store_true", help="Print machine-readable JSON")
+
+    diagnose = subparsers.add_parser("diagnose", help="Suggest possible causes from a local log file.")
+    diagnose.add_argument("log_file", type=Path, help="Path to a local text log file.")
+    diagnose.add_argument("--json", action="store_true", help="Print machine-readable JSON")
 
     subparsers.add_parser("init", help="Show the safe first-run setup checklist.")
     return parser
@@ -78,6 +83,28 @@ def main(argv: list[str] | None = None) -> int:
         return _doctor()
     if args.command == "init":
         return _init()
+    if args.command == "diagnose":
+        try:
+            report = diagnose_log(args.log_file)
+        except (OSError, ValueError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print(f"Log: {report['log_path']}")
+            print(f"Exists: {report['exists']}")
+            print(f"Bytes read: {report['bytes_read']}")
+            print("\nPossible diagnoses:")
+            for item in report["diagnoses"]:
+                print(f"  - {item['category']}")
+                print(f"    Possible cause: {item['possible_cause']}")
+                print(f"    Suggested checks: {item['suggested_checks']}")
+            if not report["diagnoses"]:
+                print("  No known patterns matched. Review the log manually.")
+            print(f"\nNote: {report['note']}")
+        return 0 if report["exists"] else 2
+
     if args.command == "scan":
         try:
             report = scan_project(args.path)
