@@ -136,6 +136,7 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 2
+
         if args.json:
             print(json.dumps(report, indent=2))
         else:
@@ -143,13 +144,28 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Exists: {report['exists']}")
             print(f"Bytes read: {report['bytes_read']}")
             print("\nPossible diagnoses:")
+
             for item in report["diagnoses"]:
                 print(f"  - {item['category']}")
+                print(f"    Severity: {item.get('severity', 'Unknown')}")
                 print(f"    Possible cause: {item['possible_cause']}")
                 print(f"    Suggested checks: {item['suggested_checks']}")
+
             if not report["diagnoses"]:
                 print("  No known patterns matched. Review the log manually.")
+
+            summary = report.get("summary", {})
+            print("\nSummary:")
+            print(
+                f"  Errors detected: "
+                f"{summary.get('errors_detected', len(report['diagnoses']))}"
+            )
+            print(
+                f"  Highest severity: "
+                f"{summary.get('highest_severity', 'Unknown')}"
+            )
             print(f"\nNote: {report['note']}")
+
         return 0 if report["exists"] else 2
 
     if args.command == "logs":
