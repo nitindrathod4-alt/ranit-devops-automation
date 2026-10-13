@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import Any
 
 from ranit import __version__
-from ranit.diagnose import diagnose_log
+from ranit.ai_analyzer import analyze_with_ai
+from ranit.diagnose import MAX_LOG_BYTES, diagnose_log
 from ranit.docker_health import check_docker_health
 from ranit.health import check_project_health
 from ranit.inspector import inspect_project
@@ -40,6 +41,11 @@ def build_parser() -> argparse.ArgumentParser:
     diagnose = subparsers.add_parser("diagnose", help="Suggest causes from a local log file.")
     diagnose.add_argument("log_file", type=Path)
     diagnose.add_argument("--json", action="store_true")
+    diagnose.add_argument(
+        "--ai",
+        action="store_true",
+        help="Analyze the log using the local Ollama AI model.",
+    )
 
     logs = subparsers.add_parser("logs", help="Summarize severity and patterns in a log file.")
     logs.add_argument("log_file", type=Path)
@@ -94,6 +100,65 @@ def _render_report(report: dict[str, Any]) -> None:
     print("\nSafety note: this command only reads metadata; no code was executed.")
 
 
+def _diagnose(args: argparse.Namespace) -> int:
+    try:
+        report = diagnose_log(args.log_file)
+
+        if args.ai and report["exists"]:
+            size = args.log_file.stat().st_size
+            if size > MAX_LOG_BYTES:
+                raise ValueError(
+                    f"Log file is larger than the {MAX_LOG_BYTES}-byte safety limit."
+                )
+
+            log_text = args.log_file.read_text(
+                encoding="utf-8",
+                errors="replace",
+            )
+            report["ai_analysis"] = analyze_with_ai(log_text)
+
+    except (OSError, ValueError, RuntimeError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    if args.json:
+        print(json.dumps(report, indent=2))
+    else:
+        print(f"Log: {report['log_path']}")
+        print(f"Exists: {report['exists']}")
+        print(f"Bytes read: {report['bytes_read']}")
+        print("\nPossible diagnoses:")
+
+        for item in report["diagnoses"]:
+            print(f"  - {item['category']}")
+            print(f"    Severity: {item.get('severity', 'Unknown')}")
+            print(f"    Possible cause: {item['possible_cause']}")
+            print(f"    Suggested checks: {item['suggested_checks']}")
+
+        if not report["diagnoses"]:
+            print("  No known patterns matched. Review the log manually.")
+
+        summary = report.get("summary", {})
+        print("\nSummary:")
+        print(
+            f"  Errors detected: "
+            f"{summary.get('errors_detected', len(report['diagnoses']))}"
+        )
+        print(
+            f"  Highest severity: "
+            f"{summary.get('highest_severity', 'Unknown')}"
+        )
+
+        if args.ai and report.get("ai_analysis"):
+            print("\nAI Analysis:")
+            print(report["ai_analysis"])
+            print("\nNote: Local rule-based and Ollama AI analysis completed.")
+        else:
+            print(f"\nNote: {report['note']}")
+
+    return 0 if report["exists"] else 2
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -131,42 +196,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if report["available"] and report["error"] is None else 1
 
     if args.command == "diagnose":
-        try:
-            report = diagnose_log(args.log_file)
-        except (OSError, ValueError) as exc:
-            print(f"Error: {exc}", file=sys.stderr)
-            return 2
-
-        if args.json:
-            print(json.dumps(report, indent=2))
-        else:
-            print(f"Log: {report['log_path']}")
-            print(f"Exists: {report['exists']}")
-            print(f"Bytes read: {report['bytes_read']}")
-            print("\nPossible diagnoses:")
-
-            for item in report["diagnoses"]:
-                print(f"  - {item['category']}")
-                print(f"    Severity: {item.get('severity', 'Unknown')}")
-                print(f"    Possible cause: {item['possible_cause']}")
-                print(f"    Suggested checks: {item['suggested_checks']}")
-
-            if not report["diagnoses"]:
-                print("  No known patterns matched. Review the log manually.")
-
-            summary = report.get("summary", {})
-            print("\nSummary:")
-            print(
-                f"  Errors detected: "
-                f"{summary.get('errors_detected', len(report['diagnoses']))}"
-            )
-            print(
-                f"  Highest severity: "
-                f"{summary.get('highest_severity', 'Unknown')}"
-            )
-            print(f"\nNote: {report['note']}")
-
-        return 0 if report["exists"] else 2
+        return _diagnose(args)
 
     if args.command == "logs":
         try:
@@ -174,6 +204,7 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 2
+
         if args.json:
             print(json.dumps(report, indent=2))
         else:
@@ -190,6 +221,7 @@ def main(argv: list[str] | None = None) -> int:
             if not report["matches"]:
                 print("  No known error patterns matched.")
             print(f"\nNote: {report['note']}")
+
         return 0 if report["exists"] else 2
 
     if args.command == "health":
@@ -198,6 +230,7 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 2
+
         if args.json:
             print(json.dumps(report, indent=2))
         else:
@@ -216,7 +249,10 @@ def main(argv: list[str] | None = None) -> int:
             for issue in report.get("issues", []) or ["No issues detected by these checks."]:
                 print(f"  - {issue}")
             print(f"\nNote: {report['note']}")
-        return 0 if report.get("exists") and report.get("status") == "OK" else (2 if not report.get("exists") else 1)
+
+        return 0 if report.get("exists") and report.get("status") == "OK" else (
+            2 if not report.get("exists") else 1
+        )
 
     if args.command == "scan":
         try:
@@ -224,6 +260,7 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 2
+
         if args.json:
             print(json.dumps(report, indent=2))
         else:
@@ -233,10 +270,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Deployment files: {len(report['deployment_files'])}")
             print("\nFindings:")
             for finding in report["findings"]:
-                print(f"  [{finding['severity']}] {finding['file']}:{finding['line']} - {finding['rule']}")
+                print(
+                    f"  [{finding['severity']}] "
+                    f"{finding['file']}:{finding['line']} - {finding['rule']}"
+                )
             if not report["findings"]:
                 print("  No matching heuristic patterns found.")
             print(f"\nNote: {report.get('note', 'No project files were changed.')}")
+
         return 0 if report["exists"] else 2
 
     if args.command == "analyze":
@@ -245,10 +286,12 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 2
+
         if args.json:
             print(json.dumps(report, indent=2))
         else:
             _render_report(report)
+
         return 0 if report["exists"] else 2
 
     parser.print_help()
